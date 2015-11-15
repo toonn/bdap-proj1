@@ -4,56 +4,61 @@ use warnings;
 
 use File::Basename;
 
-my $N = 0;
-my %term_count;
-foreach my $file (<20news-bydate/20news-bydate-train/*/*>) {
-    $N += 1;
-    my %term_set;
+my @paths = @ARGV[0..$#ARGV-1];
+my $idf_file = $ARGV[$#ARGV];
 
-    open my $fh_count, '<', $file or die "Couldn't open $file: $!";
-    while (my $line = <$fh_count>) {
-        chomp $line;
-        my @terms = split(' ', $line);
-        foreach my $term (@terms) {
-            $term_set{$term} = ();
-        }
-    }
-    close $fh_count;
+sub term_occurrence {
+  my ($doc) = @_;
+  my %term_occur;
 
-    foreach my $term (keys %term_set) {
-        $term_count{$term} += 1;
+  open my $fh_doc, '<', $doc or die "Couldn't open $doc: $!";
+  while (my $line = <$fh_doc>) {
+    chomp $line;
+    $line = lc $line;
+    $line =~ tr/a-z //dc;
+    my @terms = split(' ', $line); # ' ' has special meaning: all whitespace
+    foreach my $term (@terms) {
+      $term_occur{$term} = ();
     }
+  }
+  close $fh_doc;
+
+  return \%term_occur;
 }
 
-my %term_idf;
-open my $fh_idf, '>', '20newsgroups.idf';
-foreach my $term (sort (keys %term_count)) {
-    $term_idf{$term} = log($N/$term_count{$term}) / log(2);
-    print $fh_idf $term . ', ' . $term_idf{$term} . "\n";
+sub term_idf {
+  my ($term_occurrence_hashes_ref) = @_;
+  my %term_idf;
+
+  foreach my $hash (values %$term_occurrence_hashes_ref) {
+    foreach my $term (keys %$hash) {
+      $term_idf{$term} += 1;
+    }
+  }
+
+  my $N = scalar keys %$term_occurrence_hashes_ref;
+  foreach my $term (keys %term_idf) {
+    $term_idf{$term} = log($N / $term_idf{$term}) / log(2);
+  }
+
+  return \%term_idf;
+}
+
+my $term_occurrence_train_ref = {};
+my $term_idf_ref = {};
+
+print 'Calculate term occurrence for training set' . "\n";
+foreach my $path (@paths) {
+  foreach my $doc (<$path/*>) {
+    $term_occurrence_train_ref->{basename $doc} = term_occurrence $doc;
+  }
+}
+print 'Calculate idf' . "\n";
+$term_idf_ref = term_idf $term_occurrence_train_ref;
+
+print 'Write idf' . "\n";
+open my $fh_idf, '>', $idf_file;
+foreach my $term (sort keys %$term_idf_ref) {
+  print $fh_idf $term . ', ' . $term_idf_ref->{$term} . "\n";
 }
 close $fh_idf;
-
-open my $tf_idf, '>', '20newsgroups_train.tf-idf';
-print $tf_idf 'name, ' . join(', ', sort (keys %term_idf)) . ', class' . "\n";
-foreach my $file (<20news-bydate/20news-bydate-train/*/*>) {
-    my %term_freq;
-    my $row = basename($file) . ', ';
-    
-    open my $fh_read, '<', $file or die "Couldn't open $file: $!";
-    while (my $line = <$fh_read>) {
-        chomp $line;
-        my @terms = split(' ', $line);
-        foreach my $term (@terms) {
-            $term_freq{$term} += 1;
-        }
-    }
-    close $fh_read;
-
-    foreach my $term (sort (keys %term_idf)) {
-        $row  = $row . ($term_freq{$term} * $term_idf{$term}) . ', ';
-    }
-
-    $row = $row . (index($file, 'graphics') != -1 ? 'graphics' : 'electronics');
-    print $tf_idf $row . "\n";
-}
-close $tf_idf;
