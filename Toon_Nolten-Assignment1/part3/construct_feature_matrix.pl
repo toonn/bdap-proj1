@@ -51,7 +51,7 @@ my %doc_class;
 sub write_tf_idf {
   my ($fh_tf_idf, $tf_idf_ref) = @_;
 
-  print $fh_tf_idf 'name, ' . join(', ', sort keys %term_idf) . ', class'
+  print $fh_tf_idf 'Document, ' . join(', ', sort keys %term_idf) . ', Class'
                     . "\n";
   my @ordered_terms = sort keys %term_idf;
   foreach my $doc (keys %$tf_idf_ref) {
